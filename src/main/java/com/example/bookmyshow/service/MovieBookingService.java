@@ -47,6 +47,10 @@ public class MovieBookingService {
             }
             movieJdbcRepository.save(movie);
         } else {
+            MovieRedis existingMovie = movieRedisRepository.findByTitle(movie.getTitle());
+            if (existingMovie != null) {
+                throw new RuntimeException("Duplicate Entry for this movie.");
+            }
             MovieRedis movieRedis = new MovieRedis();
             movieRedis.setId(movie.getId());
             movieRedis.setTitle(movie.getTitle());
@@ -54,19 +58,6 @@ public class MovieBookingService {
             movieRedisRepository.save(movieRedis);
         }
     }
-
-//    public void addMovie(Movie movie) {
-//        if (useJdbc) {
-//            movieJdbcRepository.save(movie);
-//        } else {
-//            MovieRedis movieRedis = new MovieRedis();
-//            movieRedis.setId(movie.getId());
-//            movieRedis.setTitle(movie.getTitle());
-//            movieRedis.setAvailableTickets(movie.getAvailableTickets());
-//            movieRedisRepository.save(movieRedis);
-//        }
-//    }
-
 
 
     public void bookTicket(Booking booking) {
@@ -82,27 +73,24 @@ public class MovieBookingService {
                 throw new RuntimeException("No available tickets for this movie.");
             }
         } else {
-            Optional<MovieRedis> movieRedisOptional = movieRedisRepository.findById(booking.getMovieId());
-            if (movieRedisOptional.isPresent()) {
-                MovieRedis movie = movieRedisOptional.get();
-                if (movie.getAvailableTickets() > 0) {
-                    // Decrease available tickets count
-                    movie.setAvailableTickets(movie.getAvailableTickets() - booking.getNumberOfTickets());
-                    movieRedisRepository.save(movie);
-                    // Save booking
-                    BookingRedis bookingRedis = new BookingRedis();
-                    bookingRedis.setId(booking.getId());
-                    bookingRedis.setMovieId(booking.getMovieId());
-                    bookingRedis.setNumberOfTickets(booking.getNumberOfTickets());
-                    bookingRedisRepository.save(bookingRedis);
-                } else {
-                    throw new RuntimeException("No available tickets for this movie.");
-                }
+            MovieRedis movie = movieRedisRepository.findById(booking.getMovieId());
+            if (movie != null && movie.getAvailableTickets() > 0) {
+                // Decrease available tickets count
+                movie.setAvailableTickets(movie.getAvailableTickets() - booking.getNumberOfTickets());
+                movieRedisRepository.save(movie);
+                // Save booking
+                BookingRedis bookingRedis = new BookingRedis();
+                bookingRedis.setId(booking.getId());
+                bookingRedis.setMovieId(booking.getMovieId());
+                bookingRedis.setNumberOfTickets(booking.getNumberOfTickets());
+                bookingRedisRepository.save(bookingRedis);
             } else {
-                throw new RuntimeException("Movie not found.");
+                throw new RuntimeException("No available tickets for this movie.");
             }
         }
     }
+
+
 
     public Set<String> searchMovieAndAvailableTickets(String keyword) {
         Set<String> movieNamesWithTickets = new HashSet<>();
@@ -114,12 +102,15 @@ public class MovieBookingService {
                 }
             }
         } else {
-            List<MovieRedis> movies = movieRedisRepository.findByTitleContaining(keyword);
-            for (MovieRedis movie : movies) {
-                if (movie.getAvailableTickets() > 0) {
-                    movieNamesWithTickets.add(movie.getTitle() + " - Available Tickets: " + movie.getAvailableTickets());
+            MovieRedis movies = movieRedisRepository.findByTitle(keyword);
+
+                if (movies!= null && movies.getAvailableTickets() > 0) {
+                    movieNamesWithTickets.add(movies.getTitle() + " - Available Tickets: " + movies.getAvailableTickets());
                 }
-            }
+                else{
+                    throw new RuntimeException("No Movie Found");
+                }
+
         }
         return movieNamesWithTickets;
     }
@@ -127,20 +118,48 @@ public class MovieBookingService {
 
 
     public void cancelBooking(Long id) {
+
         if (useJdbc) {
+            Optional<Booking> bookingOptional = bookingJdbcRepository.findById(id);
+            if (bookingOptional.isEmpty()) {
+                throw new RuntimeException("Booking not found.");
+            }
+            Booking booking = bookingOptional.get();
+            // Retrieve the movie associated with the booking
+            Movie movie = movieJdbcRepository.findById(booking.getMovieId());
+            if (movie == null) {
+                throw new RuntimeException("Movie not found.");
+            }
+            // Update available tickets
+            movie.setAvailableTickets(movie.getAvailableTickets() + booking.getNumberOfTickets());
+            movieJdbcRepository.save(movie);
+            // Delete the booking
             bookingJdbcRepository.delete(id);
         } else {
+            BookingRedis bookingRedis = bookingRedisRepository.findById(id);
+            if (bookingRedis==null) {
+                throw new RuntimeException("Booking not found.");
+            }
+
+            // Retrieve the movie associated with the booking
+            MovieRedis movieRedis = movieRedisRepository.findById(bookingRedis.getMovieId());
+            if (movieRedis==null) {
+                throw new RuntimeException("Movie not found.");
+            }
+
+            // Update available tickets
+            movieRedis.setAvailableTickets(movieRedis.getAvailableTickets() + bookingRedis.getNumberOfTickets());
+            movieRedisRepository.save(movieRedis);
+            // Delete the booking
             bookingRedisRepository.deleteById(id);
         }
     }
+
+
 
     // Method to switch between JDBC and Redis
     public void switchDatabase(boolean useJdbc) {
         this.useJdbc = useJdbc;
     }
-
-
-
-
 
 }

@@ -12,9 +12,8 @@ import org.springframework.data.redis.core.RedisHash;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@RedisHash("movies")
 public class MovieRedis {
-    @Id
+
     private Long id;
     private String title;
     private int availableTickets;
