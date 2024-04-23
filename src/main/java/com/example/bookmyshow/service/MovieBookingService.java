@@ -7,6 +7,7 @@ import com.example.bookmyshow.repository.BookingJdbcRepository;
 import com.example.bookmyshow.repository.BookingRedisRepository;
 import com.example.bookmyshow.repository.MovieJdbcRepository;
 import com.example.bookmyshow.repository.MovieRedisRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,12 +17,15 @@ import java.util.Optional;
 import java.util.Set;
 
 @Service
+@Slf4j
 public class MovieBookingService {
 
     private final MovieJdbcRepository movieJdbcRepository;
     private final BookingJdbcRepository bookingJdbcRepository;
     private final MovieRedisRepository movieRedisRepository;
     private final BookingRedisRepository bookingRedisRepository;
+
+    private final TicketEventProducer ticketEventProducer;
 
     @Value("${use.jdbc}")
     private boolean useJdbc; // Switch for database selection
@@ -31,12 +35,14 @@ public class MovieBookingService {
             MovieJdbcRepository movieJdbcRepository,
             BookingJdbcRepository bookingJdbcRepository,
             MovieRedisRepository movieRedisRepository,
-            BookingRedisRepository bookingRedisRepository
+            BookingRedisRepository bookingRedisRepository,
+            TicketEventProducer ticketEventProducer
     ) {
         this.movieJdbcRepository = movieJdbcRepository;
         this.bookingJdbcRepository = bookingJdbcRepository;
         this.movieRedisRepository = movieRedisRepository;
         this.bookingRedisRepository = bookingRedisRepository;
+        this.ticketEventProducer=ticketEventProducer;
     }
 
     public void addMovie(Movie movie) {
@@ -69,6 +75,9 @@ public class MovieBookingService {
                 movieJdbcRepository.save(movie);
                 // Save booking
                 bookingJdbcRepository.save(booking);
+
+
+
             } else {
                 throw new RuntimeException("No available tickets for this movie.");
             }
@@ -87,8 +96,10 @@ public class MovieBookingService {
             } else {
                 throw new RuntimeException("No available tickets for this movie.");
             }
+            ticketEventProducer.sendTicketBookedEvent(String.valueOf(booking.getNumberOfTickets()));
         }
     }
+
 
 
 
@@ -118,7 +129,6 @@ public class MovieBookingService {
 
 
     public void cancelBooking(Long id) {
-
         if (useJdbc) {
             Optional<Booking> bookingOptional = bookingJdbcRepository.findById(id);
             if (bookingOptional.isEmpty()) {
@@ -135,6 +145,10 @@ public class MovieBookingService {
             movieJdbcRepository.save(movie);
             // Delete the booking
             bookingJdbcRepository.delete(id);
+
+            ticketEventProducer.sendTicketCancelledEvent(String.valueOf(booking.getNumberOfTickets()));
+
+
         } else {
             BookingRedis bookingRedis = bookingRedisRepository.findById(id);
             if (bookingRedis==null) {
@@ -152,8 +166,13 @@ public class MovieBookingService {
             movieRedisRepository.save(movieRedis);
             // Delete the booking
             bookingRedisRepository.deleteById(id);
+
+            ticketEventProducer.sendTicketCancelledEvent(String.valueOf(bookingRedis.getNumberOfTickets()));
         }
+
+
     }
+
 
 
 
