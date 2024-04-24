@@ -23,7 +23,7 @@ public class MovieBookingController {
         this.movieBookingService = movieBookingService;
     }
 
-    @PostMapping("/add")
+    @PostMapping("/")
     public ResponseEntity<Movie> addMovie(@RequestBody Movie movie) {
         movieBookingService.addMovie(movie);
         return ResponseEntity.status(HttpStatus.CREATED).body(movie);
@@ -38,14 +38,14 @@ public class MovieBookingController {
     }
 
 
-    @GetMapping("/search")
+    @GetMapping("/")
     public ResponseEntity<Set<String>> searchMovieAndAvailableTickets(@RequestParam String keyword) {
         Set<String> movieNamesWithTickets = movieBookingService.searchMovieAndAvailableTickets(keyword);
         return ResponseEntity.ok().body(movieNamesWithTickets);
     }
 
 
-    @DeleteMapping("/bookings/{id}")
+    @DeleteMapping("/{id}")
     public ResponseEntity<Void> cancelBooking(@PathVariable Long id) {
         movieBookingService.cancelBooking(id);
         return ResponseEntity.noContent().build();
